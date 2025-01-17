@@ -41,7 +41,6 @@ def fmt(msg: discord.Message, for_discord: bool = True) -> str:
     Arguments:
     - msg: The message to format.
     - for_discord: Whether to format in a discord friendly way."""
-    assert isinstance(msg.channel, discord.TextChannel)
 
     return SHEET["msg"].format(
         author=msg.author.mention if for_discord else msg.author,
@@ -69,16 +68,20 @@ def get(lst: list[T], index: int, default: T) -> T:
 
 async def audit(ctx: util.Context) -> Optional[discord.Message]:
     """Writes `msg` to an #audit channel, if it exists."""
-    assert (
-        ctx.guild is not None
-        and ctx.command is not None
-        and isinstance(ctx.channel, discord.TextChannel)
-    )
+
     audit_channel: Optional[discord.TextChannel] = discord.utils.get(
         ctx.guild.channels, name="audit"
     )  # type: ignore
     if audit_channel is not None:
         try:
+            try:
+                members = " ".join(
+                    # Look at the docs for Context.args if you get queasy.
+                    [member.mention for member in get(ctx.args, 2, [])]
+                )
+            except TypeError:  # discord.py works in weird ways.
+                members = ""
+
             return await audit_channel.send(
                 SHEET[ctx.command.name].format(
                     author=ctx.author.mention,
@@ -86,7 +89,7 @@ async def audit(ctx: util.Context) -> Optional[discord.Message]:
                     channel=ctx.channel.mention,
                     amt=get(ctx.args, 1, "all"),
                     new_channel=get(ctx.args, 2, ""),
-                    members=get(ctx.args, 2, "everyone"),
+                    members=members,
                 )
             )
         except KeyError:
@@ -113,7 +116,6 @@ async def on_command_error(ctx: util.Context, error: Exception) -> None:
 @bot.before_invoke
 async def before_invoke(ctx: util.Context) -> None:
     # Deletes the message that invoked the command and logs the command to #audit.
-    assert ctx.command is not None
     await ctx.message.delete()
     await audit(ctx)
 
@@ -130,7 +132,6 @@ async def bobbin(ctx: util.Context, amt: Optional[int], name: str) -> None:
     - ctx: The discord context.
     - amt: The number of messages to move.
     - name: The name of the thread to create."""
-    assert isinstance(ctx.channel, discord.TextChannel)
 
     thread: discord.Thread = await ctx.channel.create_thread(
         name=name, type=discord.ChannelType.public_thread
@@ -150,7 +151,6 @@ async def pin(ctx: util.Context, amt: Optional[int]) -> None:
     Arguments:
     - ctx: The discord context.
     - amt: The number of messages to pin."""
-    assert isinstance(ctx.channel, discord.TextChannel)
 
     msgs: list[discord.Message] = [msg async for msg in ctx.channel.history(limit=amt)]
     msgs.sort(key=lambda msg: msg.created_at)
@@ -163,14 +163,16 @@ async def pin(ctx: util.Context, amt: Optional[int]) -> None:
 async def cp(ctx: util.Context, amt: Optional[int], channel: Channel) -> None:
     """Copies the last `amt` messages to a channel.
 
-    This channel can be in a different server, as long as hilda is also present
-    in that server. If `amt` is not given, it will copy the whole channel.
+    This channel can be in a different server, as long as hilda and the user is also
+    present in that server. If `amt` is not given, it will copy the whole channel.
 
     Arguments:
     - ctx: The discord context.
     - amt: The number of messages to copy.
     - channel: The server and channel to copy to, in the form `Server@Channel`."""
-    assert isinstance(ctx.channel, discord.TextChannel)
+
+    if ctx.author not in channel._inner.members:
+        ctx.send("ERROR: User is not a member of that channel!")
 
     msgs: list[discord.Message] = [msg async for msg in ctx.channel.history(limit=amt)]
     msgs.sort(key=lambda msg: msg.created_at)
@@ -183,14 +185,16 @@ async def cp(ctx: util.Context, amt: Optional[int], channel: Channel) -> None:
 async def mv(ctx: util.Context, amt: Optional[int], channel: Channel) -> None:
     """Moves the last `amt` messages to a channel.
 
-    This channel can be in a different server, as long as hilda is also present
-    in that server. If `amt` is not given, it will move the whole channel.
+    This channel can be in a different server, as long as hilda and the user is also
+    present in that server. If `amt` is not given, it will move the whole channel.
 
     Arguments:
     - ctx: The discord context.
     - amt: The number of messages to move.
     - channel: The server and channel to move to, in the form `Server@Channel`."""
-    assert isinstance(ctx.channel, discord.TextChannel)
+
+    if ctx.author not in channel._inner.members:
+        ctx.send("ERROR: User is not a member of that channel!")
 
     msgs: list[discord.Message] = await ctx.channel.purge(limit=amt)
     msgs.sort(key=lambda m: m.created_at)
@@ -209,8 +213,6 @@ async def save(ctx: util.Context, amt: Optional[int]) -> None:
     Arguments:
     - ctx: The discord context.
     - amt: The number of messages to move."""
-
-    assert isinstance(ctx.channel, discord.TextChannel) and ctx.guild is not None
 
     path: str = BACKUP_NAME.format(
         guild=ctx.guild.name,
@@ -244,7 +246,6 @@ async def rm(
     - ctx: The discord context.
     - amt: The number of messages to delete.
     - members: The list of members whose messages will be deleted."""
-    assert isinstance(ctx.channel, discord.TextChannel)
 
     # Confirm deletion by adding a reaction.
     msg: discord.Message = await ctx.send("React to this message to proceed.")

@@ -19,6 +19,7 @@ for managing server messages and performing operations on them.
 $ git clone https://github.com/mbyx/hilda.git
 $ cd hilda/
 $ poetry install
+$ poetry shell
 $ nano .env
 BOT_TOKEN=<Your token here>
 RUNNING_LOCALLY=<1|0>
